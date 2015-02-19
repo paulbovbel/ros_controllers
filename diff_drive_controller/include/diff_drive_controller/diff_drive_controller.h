@@ -145,6 +145,9 @@ namespace diff_drive_controller{
     /// Whether to publish odometry to tf or not:
     bool enable_odom_tf_;
 
+    /// Whether estimate velocity from joint.position, or read directly from joint.velocity
+    bool estimate_velocity_from_position_;
+
     /// Number of wheel joints:
     size_t wheel_joints_size_;
 

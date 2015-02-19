@@ -60,8 +60,15 @@ namespace diff_drive_controller
   {
   public:
 
+    //Velocity 2D struct, used to pass around linear and angular component of velocity
+    struct Velocity2D{
+      double linear;
+      double angular;
+      Velocity2D(double linear, double angular) : linear(linear), angular(angular) { }
+    };
+
     /// Integration function, used to integrate the odometry:
-    typedef boost::function<void(double, double)> IntegrationFunction;
+    typedef boost::function<void(Velocity2D)> IntegrationFunction;
 
     /**
      * \brief Constructor
@@ -78,13 +85,24 @@ namespace diff_drive_controller
     void init(const ros::Time &time);
 
     /**
-     * \brief Updates the odometry class with latest wheels position
+     * \brief Updates the odometry class with latest wheels position, estimate velocity from position
      * \param left_pos  Left  wheel position [rad]
      * \param right_pos Right wheel position [rad]
      * \param time      Current time
      * \return true if the odometry is actually updated
      */
     bool update(double left_pos, double right_pos, const ros::Time &time);
+
+    /**
+    * \brief Updates the odometry class with latest wheels position and velocity
+    * \param left_pos  Left  wheel position [rad]
+    * \param right_pos Right wheel position [rad]
+    * \param left_vel  Left  wheel velocity [rad/s]
+    * \param right_vel Right wheel velocity [rad/s]
+    * \param time      Current time
+    * \return true if the odometry is actually updated
+    */
+    bool update(double left_pos, double right_pos, double left_vel, double right_vel, const ros::Time &time);
 
     /**
      * \brief Updates the odometry class with latest velocity command
@@ -153,18 +171,25 @@ namespace diff_drive_controller
     typedef bacc::tag::rolling_window RollingWindow;
 
     /**
+     * \brief Process joint positions to update internal odometry and obtain linear and angular velocities
+     * \param linear  Linear  velocity   [m] (linear  displacement, i.e. m/s * dt) computed by encoders
+     * \param angular Angular velocity [rad] (angular displacement, i.e. m/s * dt) computed by encoders
+     */
+    Velocity2D processPosition(double left_pos, double right_pos);
+
+    /**
      * \brief Integrates the velocities (linear and angular) using 2nd order Runge-Kutta
      * \param linear  Linear  velocity   [m] (linear  displacement, i.e. m/s * dt) computed by encoders
      * \param angular Angular velocity [rad] (angular displacement, i.e. m/s * dt) computed by encoders
      */
-    void integrateRungeKutta2(double linear, double angular);
+    void integrateRungeKutta2(Velocity2D velocity);
 
     /**
      * \brief Integrates the velocities (linear and angular) using exact method
      * \param linear  Linear  velocity   [m] (linear  displacement, i.e. m/s * dt) computed by encoders
      * \param angular Angular velocity [rad] (angular displacement, i.e. m/s * dt) computed by encoders
      */
-    void integrateExact(double linear, double angular);
+    void integrateExact(Velocity2D velocity);
 
     /// Current timestamp:
     ros::Time timestamp_;

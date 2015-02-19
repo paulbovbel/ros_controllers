@@ -61,7 +61,7 @@ namespace diff_drive_controller
   , velocity_rolling_window_size_(velocity_rolling_window_size)
   , linear_acc_(RollingWindow::window_size = velocity_rolling_window_size)
   , angular_acc_(RollingWindow::window_size = velocity_rolling_window_size)
-  , integrate_fun_(boost::bind(&Odometry::integrateExact, this, _1, _2))
+  , integrate_fun_(boost::bind(&Odometry::integrateExact, this, _1))
   {
   }
 
@@ -77,6 +77,43 @@ namespace diff_drive_controller
 
   bool Odometry::update(double left_pos, double right_pos, const ros::Time &time)
   {
+    Odometry::Velocity2D velocity = processPosition(left_pos, right_pos);
+
+    /// We cannot estimate the speed with very small time intervals:
+    const double dt = (time - timestamp_).toSec();
+    if(dt < 0.0001)
+      return false; // Interval too small to integrate with
+
+    timestamp_ = time;
+
+    /// Estimate speeds using a rolling mean to filter them out:
+    linear_acc_(velocity.linear / dt);
+    angular_acc_(velocity.angular / dt);
+
+    linear_ = bacc::rolling_mean(linear_acc_);
+    angular_ = bacc::rolling_mean(angular_acc_);
+
+    return true;
+  }
+
+  bool Odometry::update(double left_pos, double right_pos, double left_vel, double right_vel, const ros::Time &time)
+  {
+    processPosition(left_pos, right_pos);
+
+    timestamp_ = time;
+
+    /// Get current wheel joint velocities:
+    const double left_wheel_cur_vel  = left_vel   * wheel_radius_;
+    const double right_wheel_cur_vel = right_vel  * wheel_radius_;
+
+    linear_  = (right_wheel_cur_vel + left_wheel_cur_vel) * 0.5 ;
+    angular_ = (right_wheel_cur_vel - left_wheel_cur_vel) / wheel_separation_;
+
+    return true;
+  }
+
+  Odometry::Velocity2D Odometry::processPosition(double left_pos, double right_pos){
+
     /// Get current wheel joint positions:
     const double left_wheel_cur_pos  = left_pos  * wheel_radius_;
     const double right_wheel_cur_pos = right_pos * wheel_radius_;
@@ -90,27 +127,12 @@ namespace diff_drive_controller
     right_wheel_old_pos_ = right_wheel_cur_pos;
 
     /// Compute linear and angular diff:
-    const double linear  = (right_wheel_est_vel + left_wheel_est_vel) * 0.5 ;
-    const double angular = (right_wheel_est_vel - left_wheel_est_vel) / wheel_separation_;
+    const Odometry::Velocity2D velocity((right_wheel_est_vel + left_wheel_est_vel) * 0.5,
+                              (right_wheel_est_vel - left_wheel_est_vel) / wheel_separation_);
 
     /// Integrate odometry:
-    integrate_fun_(linear, angular);
-
-    /// We cannot estimate the speed with very small time intervals:
-    const double dt = (time - timestamp_).toSec();
-    if(dt < 0.0001)
-      return false; // Interval too small to integrate with
-
-    timestamp_ = time;
-
-    /// Estimate speeds using a rolling mean to filter them out:
-    linear_acc_(linear/dt);
-    angular_acc_(angular/dt);
-
-    linear_ = bacc::rolling_mean(linear_acc_);
-    angular_ = bacc::rolling_mean(angular_acc_);
-
-    return true;
+    integrate_fun_(velocity);
+    return velocity;
   }
 
   void Odometry::updateOpenLoop(double linear, double angular, const ros::Time &time)
@@ -122,23 +144,24 @@ namespace diff_drive_controller
     /// Integrate odometry:
     const double dt = (time - timestamp_).toSec();
     timestamp_ = time;
-    integrate_fun_(linear * dt, angular * dt);
+    integrate_fun_(Odometry::Velocity2D(linear * dt, angular * dt));
   }
 
   void Odometry::setWheelParams(double wheel_separation, double wheel_radius)
   {
+
     wheel_separation_ = wheel_separation;
     wheel_radius_     = wheel_radius;
   }
 
-  void Odometry::integrateRungeKutta2(double linear, double angular)
+  void Odometry::integrateRungeKutta2(Odometry::Velocity2D velocity)
   {
-    const double direction = heading_ + angular * 0.5;
+    const double direction = heading_ + velocity.angular * 0.5;
 
     /// Runge-Kutta 2nd order integration:
-    x_       += linear * cos(direction);
-    y_       += linear * sin(direction);
-    heading_ += angular;
+    x_       += velocity.linear * cos(direction);
+    y_       += velocity.linear * sin(direction);
+    heading_ += velocity.angular;
   }
 
   /**
@@ -146,16 +169,16 @@ namespace diff_drive_controller
    * \param linear
    * \param angular
    */
-  void Odometry::integrateExact(double linear, double angular)
+  void Odometry::integrateExact(Odometry::Velocity2D velocity)
   {
-    if(fabs(angular) < 10e-3)
-      integrateRungeKutta2(linear, angular);
+    if(fabs(velocity.angular) < 10e-3)
+      integrateRungeKutta2(velocity);
     else
     {
       /// Exact integration (should solve problems when angular is zero):
       const double heading_old = heading_;
-      const double r = linear/angular;
-      heading_ += angular;
+      const double r = velocity.linear / velocity.angular;
+      heading_ += velocity.angular;
       x_       +=  r * (sin(heading_) - sin(heading_old));
       y_       += -r * (cos(heading_) - cos(heading_old));
     }
