@@ -220,7 +220,6 @@ namespace diff_drive_controller{
 
   void DiffDriveController::update(const ros::Time& time, const ros::Duration& period)
   {
-
     // COMPUTE AND PUBLISH ODOMETRY
     if (open_loop_)
     {
@@ -247,7 +246,9 @@ namespace diff_drive_controller{
       {
         // Estimate linear and angular velocity using joint information
         odometry_.update(left_pos, right_pos, time);
-      }else{
+      }
+      else
+      {
         double left_vel  = 0.0;
         double right_vel = 0.0;
         for (size_t i = 0; i < wheel_joints_size_; ++i)
