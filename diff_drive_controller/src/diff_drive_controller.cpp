@@ -181,7 +181,7 @@ namespace diff_drive_controller{
 
     controller_nh.param("estimate_velocity_from_position", estimate_velocity_from_position_, estimate_velocity_from_position_);
     ROS_INFO_STREAM_NAMED(name_, "Estimating joint velocity from joint position is  " <<
-        (enable_odom_tf_?"enabled":"disabled"));
+        (estimate_velocity_from_position_?"enabled":"disabled"));
 
     // Velocity and acceleration limits:
     controller_nh.param("linear/x/has_velocity_limits"    , limiter_lin_.has_velocity_limits    , limiter_lin_.has_velocity_limits    );
